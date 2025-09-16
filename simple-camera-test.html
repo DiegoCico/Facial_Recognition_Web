@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Camera Test</title>
+</head>
+<body>
+    <h1>Simple Camera Test</h1>
+    <video id="video" width="640" height="480" autoplay></video>
+    <br><br>
+    <button onclick="startCamera()">Start Camera</button>
+    <div id="message"></div>
+
+    <script>
+        function startCamera() {
+            const video = document.getElementById('video');
+            const message = document.getElementById('message');
+            
+            message.innerHTML = 'Requesting camera...';
+            
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function(stream) {
+                    video.srcObject = stream;
+                    message.innerHTML = 'Camera started successfully!';
+                })
+                .catch(function(error) {
+                    message.innerHTML = 'Error: ' + error.name + ' - ' + error.message;
+                    console.error('Camera error:', error);
+                });
+        }
+    </script>
+</body>
+</html>

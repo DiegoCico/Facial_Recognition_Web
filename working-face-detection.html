@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Detection App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Face Detection App</h1>
+            <p>Real-time face detection with working models</p>
+        </header>
+        
+        <main>
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <canvas id="canvas"></canvas>
+            </div>
+            
+            <div class="controls">
+                <button id="start-btn" class="btn primary">Start Camera</button>
+                <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
+            </div>
+            
+            <div id="status" class="status-message">Ready to start</div>
+            <div id="error" class="error-message hidden"></div>
+            
+            <div id="debug" style="background: #f0f0f0; padding: 10px; margin: 10px 0; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;"></div>
+        </main>
+    </div>
+
+    <!-- Load face-api.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <script>
+        const debugDiv = document.getElementById('debug');
+        function debug(message) {
+            console.log(message);
+            debugDiv.innerHTML += new Date().toLocaleTimeString() + ': ' + message + '<br>';
+            debugDiv.scrollTop = debugDiv.scrollHeight;
+        }
+        
+        class FaceDetectionApp {
+            constructor() {
+                this.videoElement = document.getElementById('video');
+                this.canvasElement = document.getElementById('canvas');
+                this.startButton = document.getElementById('start-btn');
+                this.stopButton = document.getElementById('stop-btn');
+                this.statusElement = document.getElementById('status');
+                this.errorElement = document.getElementById('error');
+                
+                this.currentStream = null;
+                this.isRunning = false;
+                this.modelsLoaded = false;
+                
+                debug('App initialized');
+                debug('face-api.js available: ' + (typeof faceapi !== 'undefined'));
+                
+                this.setupEventListeners();
+                this.loadModels();
+            }
+            
+            setupEventListeners() {
+                this.startButton.addEventListener('click', () => this.startCamera());
+                this.stopButton.addEventListener('click', () => this.stopCamera());
+                debug('Event listeners setup');
+            }
+            
+            async loadModels() {
+                try {
+                    this.updateStatus('Loading face detection models...');
+                    debug('Starting model loading...');
+                    
+                    // Use the jsdelivr CDN which has verified working models
+                    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights';
+                    
+                    debug('Loading TinyFaceDetector (lightweight)...');
+                    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                    debug('TinyFaceDetector loaded successfully');
+                    
+                    // Optional: Load SSD MobileNet for better accuracy
+                    try {
+                        debug('Loading SSD MobileNet (better accuracy)...');
+                        await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+                        debug('SSD MobileNet loaded successfully');
+                    } catch (error) {
+                        debug('SSD MobileNet failed, using TinyFaceDetector only: ' + error.message);
+                    }
+                    
+                    this.modelsLoaded = true;
+                    this.updateStatus('Models loaded! Ready to start camera.');
+                    debug('Model loading complete!');
+                    
+                } catch (error) {
+                    this.showError('Failed to load face detection models: ' + error.message);
+                    debug('Model loading error: ' + error.message);
+                    console.error('Model loading error:', error);
+                }
+            }
+            
+            async startCamera() {
+                try {
+                    if (!this.modelsLoaded) {
+                        this.showError('Please wait for models to load first');
+                        debug('Camera start blocked - models not loaded');
+                        return;
+                    }
+                    
+                    debug('Starting camera...');
+                    this.updateStatus('Starting camera...');
+                    this.startButton.disabled = true;
+                    
+                    // Get camera stream
+                    this.currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            width: { ideal: 640 }, 
+                            height: { ideal: 480 },
+                            facingMode: 'user'
+                        }
+                    });
+                    debug('Camera stream obtained');
+                    
+                    this.videoElement.srcObject = this.currentStream;
+                    
+                    // Wait for video to load
+                    await new Promise((resolve) => {
+                        this.videoElement.onloadedmetadata = () => {
+                            debug(`Video loaded: ${this.videoElement.videoWidth}x${this.videoElement.videoHeight}`);
+                            resolve();
+                        };
+                    });
+                    
+                    // Setup canvas
+                    this.canvasElement.width = this.videoElement.videoWidth;
+                    this.canvasElement.height = this.videoElement.videoHeight;
+                    debug(`Canvas setup: ${this.canvasElement.width}x${this.canvasElement.height}`);
+                    
+                    this.isRunning = true;
+                    this.startButton.disabled = true;
+                    this.stopButton.disabled = false;
+                    this.updateStatus('Camera active - detecting faces...');
+                    
+                    // Start face detection
+                    this.detectFaces();
+                    debug('Face detection started');
+                    
+                } catch (error) {
+                    this.showError('Camera error: ' + error.message);
+                    this.startButton.disabled = false;
+                    debug('Camera error: ' + error.message);
+                    console.error('Camera error:', error);
+                }
+            }
+            
+            stopCamera() {
+                debug('Stopping camera...');
+                this.isRunning = false;
+                
+                if (this.currentStream) {
+                    this.currentStream.getTracks().forEach(track => track.stop());
+                    this.currentStream = null;
+                    this.videoElement.srcObject = null;
+                }
+                
+                this.startButton.disabled = false;
+                this.stopButton.disabled = true;
+                this.updateStatus('Camera stopped');
+                debug('Camera stopped');
+            }
+            
+            async detectFaces() {
+                if (!this.isRunning) return;
+                
+                try {
+                    let detections;
+                    
+                    // Try SSD MobileNet first (better accuracy), fallback to TinyFaceDetector
+                    if (faceapi.nets.ssdMobilenetv1.isLoaded) {
+                        detections = await faceapi.detectAllFaces(
+                            this.videoElement, 
+                            new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 })
+                        );
+                    } else {
+                        detections = await faceapi.detectAllFaces(
+                            this.videoElement, 
+                            new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 })
+                        );
+                    }
+                    
+                    // Clear canvas
+                    const ctx = this.canvasElement.getContext('2d');
+                    ctx.clearRect(0, 0, this.canvasElement.width, this.canvasElement.height);
+                    
+                    // Draw face boxes
+                    detections.forEach((detection, i) => {
+                        const box = detection.box;
+                        
+                        // Draw bounding box
+                        ctx.strokeStyle = '#00ff00';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(box.x, box.y, box.width, box.height);
+                        
+                        // Draw confidence score
+                        ctx.fillStyle = '#00ff00';
+                        ctx.font = '16px Arial';
+                        ctx.fillText(
+                            `${Math.round(detection.score * 100)}%`, 
+                            box.x, 
+                            box.y - 5
+                        );
+                        
+                        // Draw face number
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(box.x, box.y, 30, 20);
+                        ctx.fillStyle = '#000000';
+                        ctx.font = '14px Arial';
+                        ctx.fillText(`${i + 1}`, box.x + 5, box.y + 15);
+                    });
+                    
+                    if (detections.length > 0) {
+                        debug(`Detected ${detections.length} face(s)`);
+                    }
+                    
+                } catch (error) {
+                    debug('Detection error: ' + error.message);
+                    console.error('Detection error:', error);
+                }
+                
+                // Continue detection loop (reduced frequency for performance)
+                if (this.isRunning) {
+                    setTimeout(() => {
+                        if (this.isRunning) {
+                            requestAnimationFrame(() => this.detectFaces());
+                        }
+                    }, 100); // 10 FPS
+                }
+            }
+            
+            updateStatus(message) {
+                this.statusElement.textContent = message;
+                this.errorElement.classList.add('hidden');
+            }
+            
+            showError(message) {
+                this.errorElement.textContent = message;
+                this.errorElement.classList.remove('hidden');
+                this.statusElement.textContent = '';
+            }
+        }
+        
+        // Start the app when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            debug('DOM loaded, starting app...');
+            new FaceDetectionApp();
+        });
+    </script>
+</body>
+</html>

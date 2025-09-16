@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        video {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+            border: 2px solid #ccc;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+        .status {
+            color: green;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Camera Debug Test</h1>
+    <video id="video" autoplay muted playsinline></video>
+    <br>
+    <button id="start-camera">Start Camera</button>
+    <button id="stop-camera">Stop Camera</button>
+    
+    <div id="status"></div>
+    <div id="error"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const startBtn = document.getElementById('start-camera');
+        const stopBtn = document.getElementById('stop-camera');
+        const statusDiv = document.getElementById('status');
+        const errorDiv = document.getElementById('error');
+        
+        let currentStream = null;
+
+        function updateStatus(message) {
+            statusDiv.innerHTML = `<div class="status">${message}</div>`;
+            errorDiv.innerHTML = '';
+            console.log('Status:', message);
+        }
+
+        function showError(message) {
+            errorDiv.innerHTML = `<div class="error">Error: ${message}</div>`;
+            statusDiv.innerHTML = '';
+            console.error('Error:', message);
+        }
+
+        async function startCamera() {
+            try {
+                updateStatus('Requesting camera access...');
+                
+                // Check if getUserMedia is supported
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('getUserMedia is not supported in this browser');
+                }
+
+                // Request camera access
+                const constraints = {
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 },
+                        facingMode: 'user'
+                    },
+                    audio: false
+                };
+
+                console.log('Requesting camera with constraints:', constraints);
+                
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                updateStatus('Camera access granted! Setting up video...');
+                
+                video.srcObject = stream;
+                currentStream = stream;
+                
+                video.onloadedmetadata = () => {
+                    updateStatus(`Camera active! Video dimensions: ${video.videoWidth}x${video.videoHeight}`);
+                };
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                
+            } catch (error) {
+                console.error('Camera error:', error);
+                
+                let errorMessage = 'Unknown error';
+                
+                if (error.name === 'NotAllowedError') {
+                    errorMessage = 'Camera access denied. Please allow camera permissions and refresh the page.';
+                } else if (error.name === 'NotFoundError') {
+                    errorMessage = 'No camera found. Please connect a camera and try again.';
+                } else if (error.name === 'NotReadableError') {
+                    errorMessage = 'Camera is already in use by another application.';
+                } else if (error.name === 'OverconstrainedError') {
+                    errorMessage = 'Camera constraints cannot be satisfied.';
+                } else if (error.name === 'SecurityError') {
+                    errorMessage = 'Camera access blocked due to security restrictions. Try using HTTPS.';
+                } else {
+                    errorMessage = error.message || 'Failed to access camera';
+                }
+                
+                showError(errorMessage);
+            }
+        }
+
+        function stopCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+                video.srcObject = null;
+            }
+            
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            updateStatus('Camera stopped');
+        }
+
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+
+        // Auto-start camera for testing
+        updateStatus('Ready to test camera. Click "Start Camera" or wait 2 seconds for auto-start...');
+        
+        setTimeout(() => {
+            if (!currentStream) {
+                startCamera();
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

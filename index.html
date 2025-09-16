@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Recognition Website</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Facial Recognition & LinkedIn Finder</h1>
+            <p>Allow camera access to identify faces and find LinkedIn profiles</p>
+        </header>
+        
+        <main>
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <canvas id="canvas"></canvas>
+                <div id="overlay-container"></div>
+            </div>
+            
+            <div class="controls">
+                <button id="start-btn" class="btn primary">Start Camera</button>
+                <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
+            </div>
+            
+            <div id="status" class="status-message"></div>
+            <div id="error" class="error-message hidden"></div>
+        </main>
+    </div>
+
+    <!-- Load face-api.js models -->
+    <script src="node_modules/face-api.js/dist/face-api.min.js"></script>
+    
+    <!-- Load our TypeScript modules -->
+    <script type="module" src="dist/main.js"></script>
+</body>
+</html>

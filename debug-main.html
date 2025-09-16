@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Main App</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Debug Main App</h1>
+        </header>
+        
+        <main>
+            <div class="video-container">
+                <video id="video" autoplay muted playsinline></video>
+                <canvas id="canvas"></canvas>
+                <div id="overlay-container"></div>
+            </div>
+            
+            <div class="controls">
+                <button id="start-btn" class="btn primary">Start Camera</button>
+                <button id="stop-btn" class="btn secondary" disabled>Stop Camera</button>
+            </div>
+            
+            <div id="status" class="status-message"></div>
+            <div id="error" class="error-message hidden"></div>
+            
+            <div id="debug-log" style="background: #f0f0f0; padding: 10px; margin: 20px 0; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow-y: auto;"></div>
+        </main>
+    </div>
+
+    <!-- Load face-api.js models -->
+    <script src="node_modules/face-api.js/dist/face-api.min.js"></script>
+    
+    <script>
+        // Debug logging
+        const debugLog = document.getElementById('debug-log');
+        function log(message) {
+            console.log(message);
+            debugLog.textContent += new Date().toLocaleTimeString() + ': ' + message + '\n';
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+        
+        // Override console methods to capture all logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            log('LOG: ' + args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            log('ERROR: ' + args.join(' '));
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            log('WARN: ' + args.join(' '));
+        };
+        
+        log('Debug page loaded');
+        log('face-api available: ' + (typeof faceapi !== 'undefined'));
+        
+        // Try to load the main module and catch any errors
+        try {
+            log('Attempting to load main module...');
+            import('./dist/main.js').then(() => {
+                log('Main module loaded successfully');
+            }).catch(error => {
+                log('Failed to load main module: ' + error.message);
+                log('Error stack: ' + error.stack);
+            });
+        } catch (error) {
+            log('Immediate error loading main module: ' + error.message);
+        }
+    </script>
+</body>
+</html>
